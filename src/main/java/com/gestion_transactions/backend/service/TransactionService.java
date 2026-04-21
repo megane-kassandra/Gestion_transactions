@@ -5,34 +5,42 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.gestion_transactions.backend.model.User;
-import com.gestion_transactions.backend.repository.UserRepository;
+import com.gestion_transactions.backend.model.Account;
+import com.gestion_transactions.backend.model.Transaction;
+import com.gestion_transactions.backend.repository.AccountRepository;
+import com.gestion_transactions.backend.repository.TransactionRepository;
+import java.util.List;
+import java.time.LocalDateTime;
+
 
 @Service
 public class TransactionService {
-
-    @Autowired
-    private UserRepository userRepository;
+    @Autowired private AccountRepository accountRepository;
+    @Autowired private TransactionRepository transactionRepository;
 
     @Transactional
-    public User deposit(Long userId, Double amount) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-        
-        user.setBalance(user.getBalance() + amount);
-        return userRepository.save(user);
+    public void deposit(Long accountId, Double amount) {
+        Account acc = accountRepository.findById(accountId).orElseThrow();
+        acc.setBalance(acc.getBalance() + amount);
+        saveLog(acc, amount, "DEPOT");
     }
 
     @Transactional
-    public User withdraw(Long userId, Double amount) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+    public void withdraw(Long accountId, Double amount) {
+        Account acc = accountRepository.findById(accountId).orElseThrow();
+        if(acc.getBalance() < amount) throw new RuntimeException("Solde insuffisant");
+        acc.setBalance(acc.getBalance() - amount);
+        saveLog(acc, amount, "RETRAIT");
+    }
 
-        if (user.getBalance() < amount) {
-            throw new RuntimeException("Solde insuffisant !");
-        }
+    private void saveLog(Account acc, Double amt, String type) {
+        Transaction t = new Transaction();
+        t.setAccount(acc); t.setAmount(amt); t.setType(type);
+        t.setDate(LocalDateTime.now());
+        transactionRepository.save(t);
+    }
 
-        user.setBalance(user.getBalance() - amount);
-        return userRepository.save(user);
+    public List<Transaction> getAllTransactions() {
+        return transactionRepository.findAll();
     }
 }

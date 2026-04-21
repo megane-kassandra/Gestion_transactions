@@ -1,11 +1,12 @@
 package com.gestion_transactions.backend.service;
 
-import com.gestion_transactions.backend.model.User;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.gestion_transactions.backend.model.User;
 import com.gestion_transactions.backend.repository.UserRepository;
-import java.util.List;
 
 @Service
 public class UserService {
@@ -24,20 +25,15 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public User deposit(Long id, Double amount) {
-        User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
-        user.setBalance(user.getBalance() + amount);
+    
+    public User updateUser(Long id, User details) {
+        User user = userRepository.findById(id).orElseThrow();
+        user.setName(details.getName());
         return userRepository.save(user);
     }
 
-    public User withdraw(Long id, Double amount) {
-        User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
-        if (user.getBalance() < amount) {
-            throw new RuntimeException("Solde insuffisant !");
-        }
-        user.setBalance(user.getBalance() - amount);
-        return userRepository.save(user);
+    public void deleteUser(Long id) {
+        userRepository.deleteById(id);
     }
-    
 
 }

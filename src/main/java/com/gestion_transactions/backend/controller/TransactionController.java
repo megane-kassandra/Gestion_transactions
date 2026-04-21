@@ -1,7 +1,7 @@
 package com.gestion_transactions.backend.controller;
 
-import com.gestion_transactions.backend.model.User;
-import com.gestion_transactions.backend.service.UserService;
+import com.gestion_transactions.backend.model.Transaction;
+import com.gestion_transactions.backend.service.TransactionService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -9,27 +9,21 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import com.gestion_transactions.backend.repository.TransactionRepository;
 
-/* 
 
 @RestController
-@RequestMapping("/api/{id}/transactions")
+@RequestMapping("/api/transactions")
 public class TransactionController {
+    @Autowired private TransactionService transactionService;
 
-    @Autowired
-    private UserService userService;
-
-
-@PostMapping //("/{id}/deposit")
-    public User deposit(@PathVariable Long id, @RequestParam Double amount) {
-        return userService.deposit(id, amount);
+    @PostMapping("/deposit")
+    public void deposit(@RequestParam Long id, @RequestParam Double amount) {
+        transactionService.deposit(id, amount);
     }
 
-    @PostMapping //("/{id}/withdraw")
-    public User withdraw(@PathVariable Long id, @RequestParam Double amount) {
-        return userService.withdraw(id, amount);
+    @PostMapping("/withdraw")
+    public void withdraw(@RequestParam Long id, @RequestParam Double amount) {
+        transactionService.withdraw(id, amount);
     }
-
 }
-
-*/
