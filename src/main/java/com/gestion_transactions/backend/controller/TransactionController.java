@@ -18,12 +18,24 @@ public class TransactionController {
     @Autowired private TransactionService transactionService;
 
     @PostMapping("/deposit")
-    public void deposit(@RequestParam Long id, @RequestParam Double amount) {
-        transactionService.deposit(id, amount);
+    public ResponseEntity<?> deposit(
+            @RequestParam Long id,
+            @RequestParam Double amount,
+            @RequestParam String depositorName,
+            @RequestParam String depositorPhone) {
+        try {
+            return ResponseEntity.ok(transactionService.deposit(id, amount, depositorName, depositorPhone));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/withdraw")
-    public void withdraw(@RequestParam Long id, @RequestParam Double amount) {
-        transactionService.withdraw(id, amount);
+    public ResponseEntity<?> withdraw(@RequestParam Long id, @RequestParam Double amount) {
+        try {
+            return ResponseEntity.ok(transactionService.withdraw(id, amount));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

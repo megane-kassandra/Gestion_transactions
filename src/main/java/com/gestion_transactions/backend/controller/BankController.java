@@ -1,9 +1,7 @@
 package com.gestion_transactions.backend.controller;
 
 import com.gestion_transactions.backend.model.Bank;
-import com.gestion_transactions.backend.model.Transaction;
 import com.gestion_transactions.backend.service.BankService;
-import com.gestion_transactions.backend.service.TransactionService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -12,25 +10,32 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin")
-public class AdminController {
-    @Autowired
-    private TransactionService transactionService;
+@RequestMapping("/api/banks")
+public class BankController {
 
     @Autowired
     private BankService bankService;
 
-    @GetMapping("/logs")
-    public List<Transaction> getHistory() {
-        return transactionService.getAllTransactions();
+    @GetMapping
+    public List<Bank> listActiveBanks() {
+        return bankService.getActiveBanks();
     }
 
-    @GetMapping("/banks")
-    public List<Bank> listBanks() {
+    @GetMapping("/all")
+    public List<Bank> listAllBanks() {
         return bankService.getAllBanks();
     }
 
-    @PostMapping("/banks")
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getBank(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(bankService.getBankById(id));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping
     public ResponseEntity<?> addBank(@RequestBody Bank bank) {
         try {
             return ResponseEntity.ok(bankService.addBank(bank));
@@ -39,20 +44,20 @@ public class AdminController {
         }
     }
 
-    @DeleteMapping("/banks/{id}")
-    public ResponseEntity<?> removeBank(@PathVariable Long id) {
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateBank(@PathVariable Long id, @RequestBody Bank details) {
         try {
-            bankService.removeBank(id);
-            return ResponseEntity.ok("Banque désactivée avec succès.");
+            return ResponseEntity.ok(bankService.updateBank(id, details));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    @PutMapping("/banks/{id}")
-    public ResponseEntity<?> updateBank(@PathVariable Long id, @RequestBody Bank details) {
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deactivateBank(@PathVariable Long id) {
         try {
-            return ResponseEntity.ok(bankService.updateBank(id, details));
+            bankService.removeBank(id);
+            return ResponseEntity.ok("Banque désactivée avec succès.");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

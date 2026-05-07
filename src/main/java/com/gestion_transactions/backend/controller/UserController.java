@@ -1,14 +1,15 @@
 package com.gestion_transactions.backend.controller;
 
+import com.gestion_transactions.backend.model.Bank;
 import com.gestion_transactions.backend.model.User;
 import com.gestion_transactions.backend.service.UserService;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
-import org.springframework.http.ResponseEntity;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/users")
@@ -30,6 +31,29 @@ public class UserController {
     @GetMapping
     public List<User> listUsers() {
         return userService.getAllUsers();
+    }
+
+    @PostMapping("/{userId}/banks/{bankId}")
+    public ResponseEntity<?> addBankToUser(@PathVariable Long userId, @PathVariable Long bankId) {
+        try {
+            return ResponseEntity.ok(userService.addBankToUser(userId, bankId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{userId}/banks/{bankId}")
+    public ResponseEntity<?> removeBankFromUser(@PathVariable Long userId, @PathVariable Long bankId) {
+        try {
+            return ResponseEntity.ok(userService.removeBankFromUser(userId, bankId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/{userId}/banks")
+    public ResponseEntity<Set<Bank>> getBanksForUser(@PathVariable Long userId) {
+        return ResponseEntity.ok(userService.getBanksForUser(userId));
     }
 
 }

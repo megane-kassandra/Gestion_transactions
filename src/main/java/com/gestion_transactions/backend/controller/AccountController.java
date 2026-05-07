@@ -16,11 +16,12 @@ public class AccountController {
     // Créer un compte pour un utilisateur existant
     @PostMapping("/user/{userId}")
     public ResponseEntity<?> createAccountForUser(
-            @PathVariable Long userId, 
+            @PathVariable Long userId,
+            @RequestParam Long bankId,
             @RequestParam(required = false, defaultValue = "0.0") Double initialBalance) {
-        
+
         try {
-            Account newAccount = accountService.createAccount(userId, initialBalance);
+            Account newAccount = accountService.createAccount(userId, bankId, initialBalance);
             return ResponseEntity.ok(newAccount);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
