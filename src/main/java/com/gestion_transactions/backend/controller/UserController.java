@@ -7,6 +7,12 @@ import com.gestion_transactions.backend.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.util.List;
 import java.util.Set;
@@ -19,15 +25,22 @@ public class UserController {
     private UserService userService;
 
     @PostMapping
-    public ResponseEntity<?> addUser(@RequestBody Object request) {
+    public ResponseEntity<?> addUser(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Objet User ou tableau de Users",
+            content = {
+                    @Content(mediaType = "application/json", schema = @Schema(implementation = User.class)),
+                    @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = User.class)))
+            }
+    ) @RequestBody String requestBody) {
         try {
-            if (request instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<User> users = (List<User>) request;
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode request = objectMapper.readTree(requestBody);
+            if (request.isArray()) {
+                List<User> users = objectMapper.convertValue(request, new TypeReference<List<User>>() {});
                 List<User> createdUsers = userService.createMultipleUsers(users);
                 return ResponseEntity.ok(createdUsers);
             } else {
-                User user = (User) request;
+                User user = objectMapper.convertValue(request, User.class);
                 user = userService.createUser(user);
                 return ResponseEntity.ok(user);
             }

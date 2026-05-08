@@ -3,6 +3,9 @@ package com.gestion_transactions.backend.controller;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.gestion_transactions.backend.model.Bank;
 import com.gestion_transactions.backend.model.Transaction;
 import com.gestion_transactions.backend.service.BankService;
@@ -33,8 +36,14 @@ public class AdminController {
         return bankService.getAllBanks();
     }
 
-    @PostMapping("/banks")
-    public ResponseEntity<?> addBank(@RequestBody String requestBody) {
+        @PostMapping("/banks")
+        public ResponseEntity<?> addBank(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Objet Bank ou tableau de Banks",
+            content = {
+                @Content(mediaType = "application/json", schema = @Schema(implementation = Bank.class)),
+                @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = Bank.class)))
+            }
+        ) @RequestBody String requestBody) {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode request = objectMapper.readTree(requestBody);
