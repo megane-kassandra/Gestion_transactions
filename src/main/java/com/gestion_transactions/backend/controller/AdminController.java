@@ -23,9 +23,6 @@ public class AdminController {
     @Autowired
     private BankService bankService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
     @GetMapping("/logs")
     public List<Transaction> getHistory() {
         return transactionService.getAllTransactions();
@@ -39,6 +36,7 @@ public class AdminController {
     @PostMapping("/banks")
     public ResponseEntity<?> addBank(@RequestBody JsonNode request) {
         try {
+            ObjectMapper objectMapper = new ObjectMapper();
             if (request.isArray()) {
                 List<Bank> banks = objectMapper.convertValue(request, new TypeReference<List<Bank>>() {});
                 List<Bank> createdBanks = bankService.createMultipleBanks(banks);
