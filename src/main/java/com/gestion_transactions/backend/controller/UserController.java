@@ -19,10 +19,18 @@ public class UserController {
     private UserService userService;
 
     @PostMapping
-    public ResponseEntity<?> addUser(@RequestBody User user) {
+    public ResponseEntity<?> addUser(@RequestBody Object request) {
         try {
-            user = userService.createUser(user);
-            return ResponseEntity.ok(user);
+            if (request instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<User> users = (List<User>) request;
+                List<User> createdUsers = userService.createMultipleUsers(users);
+                return ResponseEntity.ok(createdUsers);
+            } else {
+                User user = (User) request;
+                user = userService.createUser(user);
+                return ResponseEntity.ok(user);
+            }
         } catch (Exception e) {
             return ResponseEntity.status(400).body(e.getMessage());
         }

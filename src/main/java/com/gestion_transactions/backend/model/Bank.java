@@ -38,6 +38,9 @@ public class Bank {
     private Double withdrawalFee = 0.0; // en pourcentage, ex: 1.5 = 1.5%
 
     @Column(nullable = false)
+    private Double dailyWithdrawalLimit = 10000.0; // limite de retrait quotidienne par défaut
+
+    @Column(nullable = false)
     private Boolean active = true;
 
     @ManyToMany(mappedBy = "banks")

@@ -24,6 +24,9 @@ public class BankService {
         if (bank.getWithdrawalFee() == null) {
             bank.setWithdrawalFee(0.0);
         }
+        if (bank.getDailyWithdrawalLimit() == null) {
+            bank.setDailyWithdrawalLimit(10000.0);
+        }
         bank.setActive(true);
         return bankRepository.save(bank);
     }
@@ -43,6 +46,7 @@ public class BankService {
         bank.setCode(details.getCode());
         bank.setDepositFee(details.getDepositFee() != null ? details.getDepositFee() : 0.0);
         bank.setWithdrawalFee(details.getWithdrawalFee() != null ? details.getWithdrawalFee() : 0.0);
+        bank.setDailyWithdrawalLimit(details.getDailyWithdrawalLimit() != null ? details.getDailyWithdrawalLimit() : 10000.0);
         return bankRepository.save(bank);
     }
 
@@ -57,5 +61,24 @@ public class BankService {
     public Bank getBankById(Long id) {
         return bankRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Banque introuvable avec l'ID: " + id));
+    }
+
+    public List<Bank> createMultipleBanks(List<Bank> banks) {
+        for (Bank bank : banks) {
+            if (bankRepository.existsByCode(bank.getCode())) {
+                throw new RuntimeException("Une banque avec le code '" + bank.getCode() + "' existe déjà.");
+            }
+            if (bank.getDepositFee() == null) {
+                bank.setDepositFee(0.0);
+            }
+            if (bank.getWithdrawalFee() == null) {
+                bank.setWithdrawalFee(0.0);
+            }
+            if (bank.getDailyWithdrawalLimit() == null) {
+                bank.setDailyWithdrawalLimit(10000.0);
+            }
+            bank.setActive(true);
+        }
+        return bankRepository.saveAll(banks);
     }
 }

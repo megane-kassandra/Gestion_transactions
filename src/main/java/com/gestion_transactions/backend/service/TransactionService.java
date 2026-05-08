@@ -73,6 +73,20 @@ public class TransactionService {
         Account acc = accountRepository.findById(accountId)
                 .orElseThrow(() -> new RuntimeException("Compte introuvable avec l'ID: " + accountId));
 
+        // Vérification de la limite de retrait quotidienne
+        LocalDateTime today = LocalDateTime.now();
+        Double totalWithdrawnToday = transactionRepository.getTotalWithdrawalsToday(acc.getUser().getId(), acc.getBank().getId(), today);
+        if (totalWithdrawnToday == null) {
+            totalWithdrawnToday = 0.0;
+        }
+
+        if (totalWithdrawnToday + amount > acc.getBank().getDailyWithdrawalLimit()) {
+            throw new RuntimeException(String.format(
+                "Limite de retrait quotidienne dépassée. Déjà retiré aujourd'hui: %.2f FCFA. Limite autorisée: %.2f FCFA. Tentative de retrait: %.2f FCFA.",
+                totalWithdrawnToday, acc.getBank().getDailyWithdrawalLimit(), amount
+            ));
+        }
+
         double feeRate = acc.getBank().getWithdrawalFee() / 100.0;
         double fee = amount * feeRate;
         double totalDeducted = amount + fee;

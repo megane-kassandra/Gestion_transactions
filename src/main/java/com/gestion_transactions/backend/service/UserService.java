@@ -71,4 +71,13 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'ID: " + id));
         userRepository.deleteById(id);
     }
+
+    public List<User> createMultipleUsers(List<User> users) {
+        for (User user : users) {
+            if (user.getEmail() != null && userRepository.findByEmail(user.getEmail()).isPresent()) {
+                throw new RuntimeException("Un utilisateur avec l'email '" + user.getEmail() + "' existe déjà.");
+            }
+        }
+        return userRepository.saveAll(users);
+    }
 }
