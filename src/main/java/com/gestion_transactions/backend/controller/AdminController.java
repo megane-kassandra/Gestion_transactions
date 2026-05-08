@@ -1,5 +1,8 @@
 package com.gestion_transactions.backend.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gestion_transactions.backend.model.Bank;
 import com.gestion_transactions.backend.model.Transaction;
 import com.gestion_transactions.backend.service.BankService;
@@ -20,6 +23,9 @@ public class AdminController {
     @Autowired
     private BankService bankService;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @GetMapping("/logs")
     public List<Transaction> getHistory() {
         return transactionService.getAllTransactions();
@@ -31,15 +37,14 @@ public class AdminController {
     }
 
     @PostMapping("/banks")
-    public ResponseEntity<?> addBank(@RequestBody Object request) {
+    public ResponseEntity<?> addBank(@RequestBody JsonNode request) {
         try {
-            if (request instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Bank> banks = (List<Bank>) request;
+            if (request.isArray()) {
+                List<Bank> banks = objectMapper.convertValue(request, new TypeReference<List<Bank>>() {});
                 List<Bank> createdBanks = bankService.createMultipleBanks(banks);
                 return ResponseEntity.ok(createdBanks);
             } else {
-                Bank bank = (Bank) request;
+                Bank bank = objectMapper.convertValue(request, Bank.class);
                 return ResponseEntity.ok(bankService.addBank(bank));
             }
         } catch (Exception e) {
