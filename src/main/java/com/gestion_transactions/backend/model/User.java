@@ -1,5 +1,6 @@
 package com.gestion_transactions.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -25,7 +26,8 @@ public class User {
 
     // balance supprimée : elle est portée par chaque Account
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<Account> accounts;
+    @JsonIgnore
+    private List<Account> accounts;    
 
     @ManyToMany
     @JoinTable(

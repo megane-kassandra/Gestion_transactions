@@ -33,7 +33,7 @@ public class Account {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "users"})
     @ManyToOne
     @JoinColumn(name = "bank_id", nullable = false)
     private Bank bank;
