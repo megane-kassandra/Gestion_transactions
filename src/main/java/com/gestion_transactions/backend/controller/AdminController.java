@@ -31,9 +31,17 @@ public class AdminController {
     }
 
     @PostMapping("/banks")
-    public ResponseEntity<?> addBank(@RequestBody Bank bank) {
+    public ResponseEntity<?> addBank(@RequestBody Object request) {
         try {
-            return ResponseEntity.ok(bankService.addBank(bank));
+            if (request instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Bank> banks = (List<Bank>) request;
+                List<Bank> createdBanks = bankService.createMultipleBanks(banks);
+                return ResponseEntity.ok(createdBanks);
+            } else {
+                Bank bank = (Bank) request;
+                return ResponseEntity.ok(bankService.addBank(bank));
+            }
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

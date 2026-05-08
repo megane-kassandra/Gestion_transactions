@@ -34,40 +34,4 @@ public class BankController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-
-    @PostMapping
-    public ResponseEntity<?> addBank(@RequestBody Object request) {
-        try {
-            if (request instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Bank> banks = (List<Bank>) request;
-                List<Bank> createdBanks = bankService.createMultipleBanks(banks);
-                return ResponseEntity.ok(createdBanks);
-            } else {
-                Bank bank = (Bank) request;
-                return ResponseEntity.ok(bankService.addBank(bank));
-            }
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updateBank(@PathVariable Long id, @RequestBody Bank details) {
-        try {
-            return ResponseEntity.ok(bankService.updateBank(id, details));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> deactivateBank(@PathVariable Long id) {
-        try {
-            bankService.removeBank(id);
-            return ResponseEntity.ok("Banque désactivée avec succès.");
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
 }
