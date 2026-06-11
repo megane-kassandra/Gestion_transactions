@@ -13,6 +13,15 @@ public class AccountController {
     @Autowired
     private AccountService accountService;
 
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getAccountsForUser(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(accountService.getAccountsByUser(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     // Créer un compte pour un utilisateur existant
     @PostMapping("/user/{userId}")
     public ResponseEntity<?> createAccountForUser(

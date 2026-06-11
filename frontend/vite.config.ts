@@ -8,4 +8,13 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  server: {
+    proxy: {
+      '/api': {
+        // target: 'http://localhost:8082',
+        target: 'https://gestion-transactions.onrender.com',
+        changeOrigin: true,
+      },
+    },
+  },
 })

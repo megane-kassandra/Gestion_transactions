@@ -38,6 +38,10 @@ public class UserServiceTest {
 
     @Test
     public void testDeleteUser() {
+        User user = new User();
+        user.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
         // On demande au service de supprimer l'ID 1
         userService.deleteUser(1L);
 
