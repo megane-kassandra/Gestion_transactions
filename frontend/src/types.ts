@@ -21,6 +21,10 @@ export type Account = {
   id: number
   accountNumber: string
   balance: number
+  userId?: number
+  userName?: string
+  userEmail?: string
+  userPhone?: string
   user?: User
   bank?: Bank
 }

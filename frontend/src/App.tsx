@@ -3,9 +3,22 @@ import { api } from './api'
 import type { Account, Bank, BankPayload, Transaction, User } from './types'
 import './App.css'
 
-type View = 'dashboard' | 'users' | 'banks' | 'accounts' | 'operations' | 'history'
+type PublicPage = 'home' | 'login' | 'register'
+type AdminView = 'dashboard' | 'users' | 'banks' | 'accounts' | 'operations' | 'history'
+type ClientView = 'dashboard' | 'accounts' | 'operations' | 'history'
 type Operation = 'deposit' | 'withdraw'
 type NoticeTone = 'success' | 'error'
+type LoginRole = 'client' | 'admin'
+
+type Session =
+  | {
+      role: 'admin'
+      label: string
+    }
+  | {
+      role: 'client'
+      userId: number
+    }
 
 type BankForm = {
   name: string
@@ -22,11 +35,21 @@ type UserForm = {
   phone: string
 }
 
-const views: Array<{ id: View; label: string }> = [
-  { id: 'dashboard', label: 'Tableau de bord' },
+const SESSION_KEY = 'gestion-transactions-session'
+const ADMIN_ACCESS_CODE = 'admin'
+
+const adminViews: Array<{ id: AdminView; label: string }> = [
+  { id: 'dashboard', label: 'Admin' },
   { id: 'users', label: 'Utilisateurs' },
   { id: 'banks', label: 'Banques' },
   { id: 'accounts', label: 'Comptes' },
+  { id: 'operations', label: 'Caisse' },
+  { id: 'history', label: 'Historique' },
+]
+
+const clientViews: Array<{ id: ClientView; label: string }> = [
+  { id: 'dashboard', label: 'Mon espace' },
+  { id: 'accounts', label: 'Mes comptes' },
   { id: 'operations', label: 'Opérations' },
   { id: 'history', label: 'Historique' },
 ]
@@ -61,6 +84,27 @@ const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
   timeStyle: 'short',
 })
 
+function readStoredSession(): Session | null {
+  const rawSession = localStorage.getItem(SESSION_KEY)
+  if (!rawSession) {
+    return null
+  }
+
+  try {
+    const session = JSON.parse(rawSession) as Session
+    if (session.role === 'admin' && typeof session.label === 'string') {
+      return session
+    }
+    if (session.role === 'client' && typeof session.userId === 'number') {
+      return session
+    }
+  } catch {
+    localStorage.removeItem(SESSION_KEY)
+  }
+
+  return null
+}
+
 function formatCurrency(value: number | null | undefined): string {
   const numericValue = Number(value ?? 0)
   return currencyFormatter.format(Number.isFinite(numericValue) ? numericValue : 0)
@@ -83,6 +127,10 @@ function formatDate(value: string | null | undefined): string {
 function toNumber(value: string, fallback = 0): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '')
 }
 
 function normalizeBankForm(form: BankForm): BankPayload {
@@ -112,7 +160,7 @@ function getTransactionTypeLabel(type: string): string {
 }
 
 function getUserName(account?: Account): string {
-  return account?.user?.name || 'Utilisateur non exposé'
+  return account?.user?.name || account?.userName || 'Utilisateur inconnu'
 }
 
 function getBankName(bank?: Bank): string {
@@ -152,7 +200,10 @@ function EmptyState({ label }: { label: string }) {
 }
 
 function App() {
-  const [activeView, setActiveView] = useState<View>('dashboard')
+  const [publicPage, setPublicPage] = useState<PublicPage>('home')
+  const [session, setSession] = useState<Session | null>(() => readStoredSession())
+  const [adminView, setAdminView] = useState<AdminView>('dashboard')
+  const [clientView, setClientView] = useState<ClientView>('dashboard')
   const [users, setUsers] = useState<User[]>([])
   const [banks, setBanks] = useState<Bank[]>([])
   const [activeBanks, setActiveBanks] = useState<Bank[]>([])
@@ -163,12 +214,23 @@ function App() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  const [loginRole, setLoginRole] = useState<LoginRole>('client')
+  const [loginForm, setLoginForm] = useState({
+    email: '',
+    phone: '',
+    adminCode: '',
+  })
+  const [registerForm, setRegisterForm] = useState<UserForm>(emptyUserForm)
   const [userForm, setUserForm] = useState<UserForm>(emptyUserForm)
   const [bankForm, setBankForm] = useState<BankForm>(emptyBankForm)
   const [editingBankId, setEditingBankId] = useState<number | null>(null)
   const [editingBankForm, setEditingBankForm] = useState<BankForm>(emptyBankForm)
   const [accountForm, setAccountForm] = useState({
     userId: '',
+    bankId: '',
+    initialBalance: '0',
+  })
+  const [clientAccountForm, setClientAccountForm] = useState({
     bankId: '',
     initialBalance: '0',
   })
@@ -214,6 +276,24 @@ function App() {
     void loadData()
   }, [loadData])
 
+  useEffect(() => {
+    if (!success) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setSuccess(''), 4000)
+    return () => window.clearTimeout(timeoutId)
+  }, [success])
+
+  useEffect(() => {
+    if (!error) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setError(''), 6500)
+    return () => window.clearTimeout(timeoutId)
+  }, [error])
+
   const orderedTransactions = useMemo(
     () =>
       [...transactions].sort(
@@ -222,13 +302,28 @@ function App() {
     [transactions],
   )
 
-  const filteredTransactions = useMemo(
-    () =>
-      historyType === 'ALL'
-        ? orderedTransactions
-        : orderedTransactions.filter((transaction) => transaction.type === historyType),
-    [historyType, orderedTransactions],
-  )
+  const currentUser = useMemo(() => {
+    if (session?.role !== 'client') {
+      return undefined
+    }
+    return users.find((user) => user.id === session.userId)
+  }, [session, users])
+
+  const clientAccounts = useMemo(() => {
+    if (session?.role !== 'client') {
+      return []
+    }
+    return accounts.filter((account) => (account.user?.id ?? account.userId) === session.userId)
+  }, [accounts, session])
+
+  const clientTransactions = useMemo(() => {
+    if (session?.role !== 'client') {
+      return []
+    }
+    return orderedTransactions.filter(
+      (transaction) => (transaction.account?.user?.id ?? transaction.account?.userId) === session.userId,
+    )
+  }, [orderedTransactions, session])
 
   const metrics = useMemo(() => {
     const totalBalance = accounts.reduce((sum, account) => sum + (account.balance ?? 0), 0)
@@ -248,6 +343,34 @@ function App() {
     }
   }, [accounts, transactions])
 
+  const clientMetrics = useMemo(() => {
+    const totalBalance = clientAccounts.reduce((sum, account) => sum + (account.balance ?? 0), 0)
+    const totalFees = clientTransactions.reduce((sum, transaction) => sum + (transaction.fee ?? 0), 0)
+    const totalDeposits = clientTransactions
+      .filter((transaction) => transaction.type === 'DEPOT')
+      .reduce((sum, transaction) => sum + (transaction.netAmount ?? 0), 0)
+    const totalWithdrawals = clientTransactions
+      .filter((transaction) => transaction.type === 'RETRAIT')
+      .reduce((sum, transaction) => sum + (transaction.netAmount ?? 0), 0)
+
+    return {
+      totalBalance,
+      totalFees,
+      totalDeposits,
+      totalWithdrawals,
+    }
+  }, [clientAccounts, clientTransactions])
+
+  function persistSession(nextSession: Session | null) {
+    setSession(nextSession)
+    if (nextSession) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
+    } else {
+      localStorage.removeItem(SESSION_KEY)
+      setPublicPage('home')
+    }
+  }
+
   async function runAction(action: () => Promise<void>, message: string) {
     setSaving(true)
     setError('')
@@ -258,6 +381,68 @@ function App() {
       await loadData()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Action impossible.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      if (loginRole === 'admin') {
+        if (loginForm.adminCode.trim() !== ADMIN_ACCESS_CODE) {
+          throw new Error('Code administrateur incorrect.')
+        }
+        persistSession({ role: 'admin', label: loginForm.email.trim() || 'Administrateur' })
+        setAdminView('dashboard')
+        setSuccess('Connexion administrateur réussie.')
+        return
+      }
+
+      const latestUsers = await api.getUsers()
+      setUsers(latestUsers)
+      const user = latestUsers.find(
+        (item) =>
+          item.email.toLowerCase() === loginForm.email.trim().toLowerCase() &&
+          normalizePhone(item.phone) === normalizePhone(loginForm.phone),
+      )
+
+      if (!user) {
+        throw new Error('Aucun client ne correspond aux informations saisies.')
+      }
+
+      persistSession({ role: 'client', userId: user.id })
+      setClientView('dashboard')
+      setSuccess('Connexion client réussie.')
+      await loadData()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Connexion impossible.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const createdUser = await api.createUser({
+        name: registerForm.name.trim(),
+        email: registerForm.email.trim(),
+        phone: registerForm.phone.trim(),
+      })
+      setRegisterForm(emptyUserForm)
+      persistSession({ role: 'client', userId: createdUser.id })
+      setClientView('dashboard')
+      setSuccess('Compte client créé avec succès.')
+      await loadData()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Inscription impossible.')
     } finally {
       setSaving(false)
     }
@@ -319,6 +504,24 @@ function App() {
     }, 'Compte créé avec succès.')
   }
 
+  async function handleCreateClientAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (session?.role !== 'client') {
+      setError('Session client introuvable.')
+      return
+    }
+
+    const clientUserId = session.userId
+    await runAction(async () => {
+      await api.createAccount({
+        userId: clientUserId,
+        bankId: toNumber(clientAccountForm.bankId),
+        initialBalance: toNumber(clientAccountForm.initialBalance),
+      })
+      setClientAccountForm({ bankId: '', initialBalance: '0' })
+    }, 'Compte ouvert avec succès.')
+  }
+
   async function handleAddBankToUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await runAction(async () => {
@@ -365,8 +568,8 @@ function App() {
     setTransactionForm({
       accountId,
       amount: '',
-      name: account?.user?.name ?? '',
-      phone: account?.user?.phone ?? '',
+      name: account?.user?.name ?? account?.userName ?? '',
+      phone: account?.user?.phone ?? account?.userPhone ?? '',
     })
   }
 
@@ -375,14 +578,238 @@ function App() {
     setEditingBankForm(bankToForm(bank))
   }
 
-  function renderDashboard() {
+  function renderPublicShell(content: ReactNode) {
+    return (
+      <div className="public-shell">
+        <header className="public-nav">
+          <button className="brand-button" onClick={() => setPublicPage('home')} type="button">
+            <span className="brand-mark">GT</span>
+            <span>Gestion Transactions</span>
+          </button>
+          <nav>
+            <button className={publicPage === 'home' ? 'active' : ''} onClick={() => setPublicPage('home')} type="button">
+              Accueil
+            </button>
+            <button className={publicPage === 'login' ? 'active' : ''} onClick={() => setPublicPage('login')} type="button">
+              Connexion
+            </button>
+            <button
+              className={publicPage === 'register' ? 'active' : ''}
+              onClick={() => setPublicPage('register')}
+              type="button"
+            >
+              Inscription
+            </button>
+          </nav>
+        </header>
+        <div className="notice-stack public-notices">
+          {error ? <Notice message={error} tone="error" /> : null}
+          {success ? <Notice message={success} tone="success" /> : null}
+        </div>
+        {content}
+      </div>
+    )
+  }
+
+  function renderHomePage() {
+    return renderPublicShell(
+      <main className="landing-page">
+        <section className="landing-hero">
+          <div>
+            <span className="eyebrow">Plateforme bancaire</span>
+            <h1>Gestion Transactions</h1>
+            <p>
+              Une interface pour piloter les banques, les comptes et les opérations avec un espace
+              client séparé de l’administration.
+            </p>
+            <div className="hero-actions">
+              <button className="primary-button" onClick={() => setPublicPage('register')} type="button">
+                Créer un compte
+              </button>
+              <button className="secondary-button" onClick={() => setPublicPage('login')} type="button">
+                Se connecter
+              </button>
+            </div>
+          </div>
+          <div className="product-preview" aria-hidden="true">
+            <div className="preview-topline">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div className="preview-grid">
+              <div>
+                <small>Solde</small>
+                <strong>{formatCurrency(metrics.totalBalance)}</strong>
+              </div>
+              <div>
+                <small>Banques</small>
+                <strong>{activeBanks.length}</strong>
+              </div>
+              <div>
+                <small>Transactions</small>
+                <strong>{transactions.length}</strong>
+              </div>
+            </div>
+            <div className="preview-list">
+              {orderedTransactions.slice(0, 3).map((transaction) => (
+                <span key={transaction.id}>
+                  <b>{getTransactionTypeLabel(transaction.type)}</b>
+                  {formatCurrency(transaction.amount)}
+                </span>
+              ))}
+              {orderedTransactions.length === 0 ? (
+                <>
+                  <span>
+                    <b>Dépôt</b>
+                    {formatCurrency(25000)}
+                  </span>
+                  <span>
+                    <b>Retrait</b>
+                    {formatCurrency(8000)}
+                  </span>
+                  <span>
+                    <b>Dépôt</b>
+                    {formatCurrency(12000)}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-band">
+          <article>
+            <span>Admin</span>
+            <strong>Gestion complète</strong>
+          </article>
+          <article>
+            <span>Client</span>
+            <strong>Comptes personnels</strong>
+          </article>
+          <article>
+            <span>API</span>
+            <strong>Spring Boot</strong>
+          </article>
+        </section>
+      </main>,
+    )
+  }
+
+  function renderLoginPage() {
+    return renderPublicShell(
+      <main className="auth-page">
+        <form className="auth-card" onSubmit={handleLogin}>
+          <span className="eyebrow">Connexion</span>
+          <h1>Accéder à votre espace</h1>
+          <div className="segmented-control" role="tablist" aria-label="Type de compte">
+            <button
+              aria-selected={loginRole === 'client'}
+              className={loginRole === 'client' ? 'active' : ''}
+              onClick={() => setLoginRole('client')}
+              type="button"
+            >
+              Client
+            </button>
+            <button
+              aria-selected={loginRole === 'admin'}
+              className={loginRole === 'admin' ? 'active' : ''}
+              onClick={() => setLoginRole('admin')}
+              type="button"
+            >
+              Admin
+            </button>
+          </div>
+          <label>
+            Email
+            <input
+              required
+              type="email"
+              value={loginForm.email}
+              onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+            />
+          </label>
+          {loginRole === 'client' ? (
+            <label>
+              Téléphone
+              <input
+                required
+                value={loginForm.phone}
+                onChange={(event) => setLoginForm({ ...loginForm, phone: event.target.value })}
+              />
+            </label>
+          ) : (
+            <label>
+              Code administrateur
+              <input
+                required
+                type="password"
+                value={loginForm.adminCode}
+                onChange={(event) => setLoginForm({ ...loginForm, adminCode: event.target.value })}
+              />
+            </label>
+          )}
+          <button className="primary-button" disabled={saving} type="submit">
+            Se connecter
+          </button>
+          <button className="text-button" onClick={() => setPublicPage('register')} type="button">
+            Créer un compte client
+          </button>
+        </form>
+      </main>,
+    )
+  }
+
+  function renderRegisterPage() {
+    return renderPublicShell(
+      <main className="auth-page">
+        <form className="auth-card" onSubmit={handleRegister}>
+          <span className="eyebrow">Inscription</span>
+          <h1>Créer un compte client</h1>
+          <label>
+            Nom complet
+            <input
+              required
+              value={registerForm.name}
+              onChange={(event) => setRegisterForm({ ...registerForm, name: event.target.value })}
+            />
+          </label>
+          <label>
+            Email
+            <input
+              required
+              type="email"
+              value={registerForm.email}
+              onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
+            />
+          </label>
+          <label>
+            Téléphone
+            <input
+              required
+              value={registerForm.phone}
+              onChange={(event) => setRegisterForm({ ...registerForm, phone: event.target.value })}
+            />
+          </label>
+          <button className="primary-button" disabled={saving} type="submit">
+            S’inscrire
+          </button>
+          <button className="text-button" onClick={() => setPublicPage('login')} type="button">
+            J’ai déjà un compte
+          </button>
+        </form>
+      </main>,
+    )
+  }
+
+  function renderAdminDashboard() {
     const recentTransactions = orderedTransactions.slice(0, 6)
 
     return (
       <main className="view-space">
-        <SectionHeader eyebrow="Vue globale" title="Activité des transactions" />
+        <SectionHeader eyebrow="Administration" title="Tableau de bord admin" />
 
-        <section className="stat-grid" aria-label="Indicateurs">
+        <section className="stat-grid" aria-label="Indicateurs administrateur">
           <article className="stat-card">
             <span>Solde total</span>
             <strong>{formatCurrency(metrics.totalBalance)}</strong>
@@ -403,43 +830,16 @@ function App() {
 
         <section className="split-layout">
           <div className="panel">
-            <SectionHeader eyebrow="Flux" title="Dernières opérations" />
+            <SectionHeader eyebrow="Flux global" title="Dernières opérations" />
             {recentTransactions.length === 0 ? (
               <EmptyState label="Aucune transaction enregistrée." />
             ) : (
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Compte</th>
-                      <th>Banque</th>
-                      <th>Montant</th>
-                      <th>Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentTransactions.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td>
-                          <span className={`status ${transaction.type.toLowerCase()}`}>
-                            {getTransactionTypeLabel(transaction.type)}
-                          </span>
-                        </td>
-                        <td>{transaction.account?.accountNumber ?? '-'}</td>
-                        <td>{getBankName(transaction.bank)}</td>
-                        <td>{formatCurrency(transaction.amount)}</td>
-                        <td>{formatDate(transaction.date)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <TransactionTable transactions={recentTransactions} compact />
             )}
           </div>
 
           <div className="panel">
-            <SectionHeader eyebrow="Balances" title="Volumes nets" />
+            <SectionHeader eyebrow="Volumes" title="Mouvements nets" />
             <div className="amount-stack">
               <div>
                 <span>Dépôts nets</span>
@@ -452,6 +852,68 @@ function App() {
               <div>
                 <span>Comptes ouverts</span>
                 <strong>{accounts.length}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  function renderClientDashboard() {
+    const recentTransactions = clientTransactions.slice(0, 6)
+
+    return (
+      <main className="view-space">
+        <SectionHeader eyebrow="Espace client" title={`Bonjour ${currentUser?.name ?? ''}`} />
+
+        <section className="stat-grid" aria-label="Indicateurs client">
+          <article className="stat-card">
+            <span>Solde total</span>
+            <strong>{formatCurrency(clientMetrics.totalBalance)}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Mes comptes</span>
+            <strong>{clientAccounts.length}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Dépôts nets</span>
+            <strong>{formatCurrency(clientMetrics.totalDeposits)}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Frais payés</span>
+            <strong>{formatCurrency(clientMetrics.totalFees)}</strong>
+          </article>
+        </section>
+
+        <section className="split-layout">
+          <div className="panel">
+            <SectionHeader eyebrow="Activité" title="Mes dernières opérations" />
+            {recentTransactions.length === 0 ? (
+              <EmptyState label="Aucune transaction sur vos comptes." />
+            ) : (
+              <TransactionTable transactions={recentTransactions} compact />
+            )}
+          </div>
+
+          <div className="panel">
+            <SectionHeader eyebrow="Profil" title="Informations client" />
+            <div className="detail-list">
+              <div>
+                <span>Nom</span>
+                <strong>{currentUser?.name ?? '-'}</strong>
+              </div>
+              <div>
+                <span>Email</span>
+                <strong>{currentUser?.email ?? '-'}</strong>
+              </div>
+              <div>
+                <span>Téléphone</span>
+                <strong>{currentUser?.phone ?? '-'}</strong>
+              </div>
+              <div>
+                <span>Retraits servis</span>
+                <strong>{formatCurrency(clientMetrics.totalWithdrawals)}</strong>
               </div>
             </div>
           </div>
@@ -618,11 +1080,7 @@ function App() {
                   <button className="primary-button" disabled={saving} type="submit">
                     Enregistrer
                   </button>
-                  <button
-                    className="secondary-button"
-                    onClick={() => setEditingBankId(null)}
-                    type="button"
-                  >
+                  <button className="secondary-button" onClick={() => setEditingBankId(null)} type="button">
                     Annuler
                   </button>
                 </div>
@@ -748,7 +1206,7 @@ function App() {
           </form>
 
           <div className="panel">
-            <SectionHeader eyebrow="Synthèse" title="Portefeuille" />
+            <SectionHeader eyebrow="Synthèse" title="Portefeuille global" />
             <div className="amount-stack">
               <div>
                 <span>Solde total</span>
@@ -768,46 +1226,90 @@ function App() {
           </div>
         </section>
 
-        <section className="panel">
-          <SectionHeader eyebrow="Registre" title="Comptes ouverts" />
-          {accounts.length === 0 ? (
-            <EmptyState label="Aucun compte." />
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>N° compte</th>
-                    <th>Utilisateur</th>
-                    <th>Banque</th>
-                    <th>Solde</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accounts.map((account) => (
-                    <tr key={account.id}>
-                      <td>{account.accountNumber}</td>
-                      <td>{getUserName(account)}</td>
-                      <td>{getBankName(account.bank)}</td>
-                      <td>{formatCurrency(account.balance)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        <AccountTable accounts={accounts} />
       </main>
     )
   }
 
-  function renderOperations() {
-    const selectedAccount = accounts.find((account) => String(account.id) === transactionForm.accountId)
+  function renderClientAccounts() {
+    return (
+      <main className="view-space">
+        <SectionHeader eyebrow="Client" title="Mes comptes bancaires" />
+
+        <section className="split-layout">
+          <form className="panel form-grid" onSubmit={handleCreateClientAccount}>
+            <h3>Ouvrir un compte</h3>
+            <label>
+              Banque
+              <select
+                required
+                value={clientAccountForm.bankId}
+                onChange={(event) =>
+                  setClientAccountForm({ ...clientAccountForm, bankId: event.target.value })
+                }
+              >
+                <option value="">Choisir</option>
+                {activeBanks.map((bank) => (
+                  <option key={bank.id} value={bank.id}>
+                    {bank.name} ({bank.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Solde initial
+              <input
+                min="0"
+                step="1"
+                type="number"
+                value={clientAccountForm.initialBalance}
+                onChange={(event) =>
+                  setClientAccountForm({ ...clientAccountForm, initialBalance: event.target.value })
+                }
+              />
+            </label>
+            <button
+              className="primary-button"
+              disabled={saving || session?.role !== 'client'}
+              type="submit"
+            >
+              Ouvrir le compte
+            </button>
+          </form>
+
+          <div className="panel">
+            <SectionHeader eyebrow="Synthèse" title="Mon portefeuille" />
+            <div className="amount-stack">
+              <div>
+                <span>Solde total</span>
+                <strong>{formatCurrency(clientMetrics.totalBalance)}</strong>
+              </div>
+              <div>
+                <span>Nombre de comptes</span>
+                <strong>{clientAccounts.length}</strong>
+              </div>
+              <div>
+                <span>Frais payés</span>
+                <strong>{formatCurrency(clientMetrics.totalFees)}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <AccountTable accounts={clientAccounts} />
+      </main>
+    )
+  }
+
+  function renderOperations(availableAccounts: Account[], title = 'Dépôts et retraits') {
+    const selectedAccount = availableAccounts.find(
+      (account) => String(account.id) === transactionForm.accountId,
+    )
     const selectedBank = selectedAccount?.bank
 
     return (
       <main className="view-space">
-        <SectionHeader eyebrow="Caisse" title="Dépôts et retraits" />
+        <SectionHeader eyebrow="Caisse" title={title} />
 
         <section className="split-layout">
           <form className="panel form-grid" onSubmit={handleTransaction}>
@@ -838,7 +1340,7 @@ function App() {
                 onChange={(event) => handleTransactionAccountChange(event.target.value)}
               >
                 <option value="">Choisir</option>
-                {accounts.map((account) => (
+                {availableAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.accountNumber} - {getUserName(account)}
                   </option>
@@ -878,7 +1380,7 @@ function App() {
                 }
               />
             </label>
-            <button className="primary-button" disabled={saving} type="submit">
+            <button className="primary-button" disabled={saving || availableAccounts.length === 0} type="submit">
               {operation === 'deposit' ? 'Enregistrer le dépôt' : 'Enregistrer le retrait'}
             </button>
           </form>
@@ -929,7 +1431,12 @@ function App() {
     )
   }
 
-  function renderHistory() {
+  function renderHistory(transactionsToDisplay: Transaction[], title = 'Historique des transactions') {
+    const visibleTransactions =
+      historyType === 'ALL'
+        ? transactionsToDisplay
+        : transactionsToDisplay.filter((transaction) => transaction.type === historyType)
+
     return (
       <main className="view-space">
         <SectionHeader
@@ -947,70 +1454,125 @@ function App() {
             </select>
           }
           eyebrow="Journal"
-          title="Historique des transactions"
+          title={title}
         />
 
         <section className="panel">
-          {filteredTransactions.length === 0 ? (
+          {visibleTransactions.length === 0 ? (
             <EmptyState label="Aucune transaction." />
           ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Compte</th>
-                    <th>Banque</th>
-                    <th>Montant</th>
-                    <th>Frais</th>
-                    <th>Net</th>
-                    <th>Déposant</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTransactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td>{formatDate(transaction.date)}</td>
-                      <td>
-                        <span className={`status ${transaction.type.toLowerCase()}`}>
-                          {getTransactionTypeLabel(transaction.type)}
-                        </span>
-                      </td>
-                      <td>{transaction.account?.accountNumber ?? '-'}</td>
-                      <td>{getBankName(transaction.bank)}</td>
-                      <td>{formatCurrency(transaction.amount)}</td>
-                      <td>{formatCurrency(transaction.fee)}</td>
-                      <td>{formatCurrency(transaction.netAmount)}</td>
-                      <td>{transaction.depositorName ?? '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TransactionTable transactions={visibleTransactions} />
           )}
         </section>
       </main>
     )
   }
 
+  function renderAdminShell() {
+    return (
+      <DashboardShell
+        label={session?.role === 'admin' ? session.label : 'Administrateur'}
+        navItems={adminViews}
+        activeView={adminView}
+        brand="GT Admin"
+        onChangeView={(view) => setAdminView(view)}
+        onLogout={() => persistSession(null)}
+        onRefresh={() => void loadData()}
+        loading={loading}
+        saving={saving}
+      >
+        {adminView === 'dashboard' ? renderAdminDashboard() : null}
+        {adminView === 'users' ? renderUsers() : null}
+        {adminView === 'banks' ? renderBanks() : null}
+        {adminView === 'accounts' ? renderAccounts() : null}
+        {adminView === 'operations' ? renderOperations(accounts) : null}
+        {adminView === 'history' ? renderHistory(orderedTransactions) : null}
+      </DashboardShell>
+    )
+  }
+
+  function renderClientShell() {
+    return (
+      <DashboardShell
+        label={currentUser?.name ?? 'Client'}
+        navItems={clientViews}
+        activeView={clientView}
+        brand="GT Client"
+        onChangeView={(view) => setClientView(view)}
+        onLogout={() => persistSession(null)}
+        onRefresh={() => void loadData()}
+        loading={loading}
+        saving={saving}
+      >
+        {clientView === 'dashboard' ? renderClientDashboard() : null}
+        {clientView === 'accounts' ? renderClientAccounts() : null}
+        {clientView === 'operations' ? renderOperations(clientAccounts, 'Mes opérations') : null}
+        {clientView === 'history' ? renderHistory(clientTransactions, 'Mon historique') : null}
+      </DashboardShell>
+    )
+  }
+
+  if (!session) {
+    if (publicPage === 'login') {
+      return renderLoginPage()
+    }
+    if (publicPage === 'register') {
+      return renderRegisterPage()
+    }
+    return renderHomePage()
+  }
+
+  return (
+    <>
+      <div className="notice-stack floating-notices">
+        {error ? <Notice message={error} tone="error" /> : null}
+        {success ? <Notice message={success} tone="success" /> : null}
+      </div>
+      {session.role === 'admin' ? renderAdminShell() : renderClientShell()}
+    </>
+  )
+}
+
+function DashboardShell<ViewId extends string>({
+  label,
+  navItems,
+  activeView,
+  brand,
+  onChangeView,
+  onLogout,
+  onRefresh,
+  loading,
+  saving,
+  children,
+}: {
+  label: string
+  navItems: Array<{ id: ViewId; label: string }>
+  activeView: ViewId
+  brand: string
+  onChangeView: (view: ViewId) => void
+  onLogout: () => void
+  onRefresh: () => void
+  loading: boolean
+  saving: boolean
+  children: ReactNode
+}) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
           <span className="brand-mark">GT</span>
           <div>
-            <h1>Gestion Transactions</h1>
-            <p>Banques, comptes et caisse</p>
+            <h1>{brand}</h1>
+            <p>{label}</p>
           </div>
         </div>
 
         <nav className="nav-list" aria-label="Navigation principale">
-          {views.map((view) => (
+          {navItems.map((view) => (
             <button
               className={activeView === view.id ? 'active' : ''}
               key={view.id}
-              onClick={() => setActiveView(view.id)}
+              onClick={() => onChangeView(view.id)}
               type="button"
             >
               {view.label}
@@ -1022,31 +1584,99 @@ function App() {
       <div className="content-shell">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Backend Spring Boot</span>
-            <strong>{loading ? 'Chargement...' : 'API connectée'}</strong>
+            <span className="eyebrow">Session active</span>
+            <strong>{loading ? 'Chargement...' : label}</strong>
           </div>
-          <button
-            className="secondary-button"
-            disabled={loading || saving}
-            onClick={() => void loadData()}
-            type="button"
-          >
-            Actualiser
-          </button>
+          <div className="topbar-actions">
+            <button className="secondary-button" disabled={loading || saving} onClick={onRefresh} type="button">
+              Actualiser
+            </button>
+            <button className="secondary-button danger-text" onClick={onLogout} type="button">
+              Déconnexion
+            </button>
+          </div>
         </header>
-
-        <div className="notice-stack">
-          {error ? <Notice message={error} tone="error" /> : null}
-          {success ? <Notice message={success} tone="success" /> : null}
-        </div>
-
-        {activeView === 'dashboard' ? renderDashboard() : null}
-        {activeView === 'users' ? renderUsers() : null}
-        {activeView === 'banks' ? renderBanks() : null}
-        {activeView === 'accounts' ? renderAccounts() : null}
-        {activeView === 'operations' ? renderOperations() : null}
-        {activeView === 'history' ? renderHistory() : null}
+        {children}
       </div>
+    </div>
+  )
+}
+
+function AccountTable({ accounts }: { accounts: Account[] }) {
+  return (
+    <section className="panel">
+      <SectionHeader eyebrow="Registre" title="Comptes ouverts" />
+      {accounts.length === 0 ? (
+        <EmptyState label="Aucun compte." />
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>N° compte</th>
+                <th>Utilisateur</th>
+                <th>Banque</th>
+                <th>Solde</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((account) => (
+                <tr key={account.id}>
+                  <td>{account.accountNumber}</td>
+                  <td>{getUserName(account)}</td>
+                  <td>{getBankName(account.bank)}</td>
+                  <td>{formatCurrency(account.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TransactionTable({
+  transactions,
+  compact = false,
+}: {
+  transactions: Transaction[]
+  compact?: boolean
+}) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            {compact ? null : <th>Date</th>}
+            <th>Type</th>
+            <th>Compte</th>
+            <th>Banque</th>
+            <th>Montant</th>
+            {compact ? <th>Date</th> : <th>Frais</th>}
+            {compact ? null : <th>Net</th>}
+            {compact ? null : <th>Déposant</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {transactions.map((transaction) => (
+            <tr key={transaction.id}>
+              {compact ? null : <td>{formatDate(transaction.date)}</td>}
+              <td>
+                <span className={`status ${transaction.type.toLowerCase()}`}>
+                  {getTransactionTypeLabel(transaction.type)}
+                </span>
+              </td>
+              <td>{transaction.account?.accountNumber ?? '-'}</td>
+              <td>{getBankName(transaction.bank)}</td>
+              <td>{formatCurrency(transaction.amount)}</td>
+              {compact ? <td>{formatDate(transaction.date)}</td> : <td>{formatCurrency(transaction.fee)}</td>}
+              {compact ? null : <td>{formatCurrency(transaction.netAmount)}</td>}
+              {compact ? null : <td>{transaction.depositorName ?? '-'}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -1062,11 +1692,19 @@ function BankFields({
     <>
       <label>
         Nom
-        <input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+        <input
+          required
+          value={form.name}
+          onChange={(event) => onChange({ ...form, name: event.target.value })}
+        />
       </label>
       <label>
         Code
-        <input required value={form.code} onChange={(event) => onChange({ ...form, code: event.target.value })} />
+        <input
+          required
+          value={form.code}
+          onChange={(event) => onChange({ ...form, code: event.target.value })}
+        />
       </label>
       <div className="form-pair">
         <label>
