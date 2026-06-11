@@ -1,6 +1,5 @@
 package com.gestion_transactions.backend.model;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -28,7 +27,7 @@ public class Account {
     @Column(nullable = false)
     private Double balance;
 
-    @JsonBackReference
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "accounts", "banks"})
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
