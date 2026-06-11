@@ -209,6 +209,8 @@ function App() {
   const [activeBanks, setActiveBanks] = useState<Bank[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [clientScopedAccounts, setClientScopedAccounts] = useState<Account[]>([])
+  const [clientScopedTransactions, setClientScopedTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -272,9 +274,41 @@ function App() {
     }
   }, [])
 
+  const loadClientData = useCallback(async (userId: number) => {
+    try {
+      const [accountsResult, transactionsResult] = await Promise.all([
+        api.getAccountsByUser(userId),
+        api.getTransactionsByUser(userId),
+      ])
+
+      setClientScopedAccounts(accountsResult)
+      setClientScopedTransactions(
+        [...transactionsResult].sort(
+          (first, second) => new Date(second.date).getTime() - new Date(first.date).getTime(),
+        ),
+      )
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Impossible de charger les informations bancaires du client.',
+      )
+    }
+  }, [])
+
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  useEffect(() => {
+    if (session?.role === 'client') {
+      void loadClientData(session.userId)
+      return
+    }
+
+    setClientScopedAccounts([])
+    setClientScopedTransactions([])
+  }, [loadClientData, session])
 
   useEffect(() => {
     if (!success) {
@@ -313,17 +347,21 @@ function App() {
     if (session?.role !== 'client') {
       return []
     }
-    return accounts.filter((account) => (account.user?.id ?? account.userId) === session.userId)
-  }, [accounts, session])
+    return clientScopedAccounts.length > 0
+      ? clientScopedAccounts
+      : accounts.filter((account) => (account.user?.id ?? account.userId) === session.userId)
+  }, [accounts, clientScopedAccounts, session])
 
   const clientTransactions = useMemo(() => {
     if (session?.role !== 'client') {
       return []
     }
-    return orderedTransactions.filter(
-      (transaction) => (transaction.account?.user?.id ?? transaction.account?.userId) === session.userId,
-    )
-  }, [orderedTransactions, session])
+    return clientScopedTransactions.length > 0
+      ? clientScopedTransactions
+      : orderedTransactions.filter(
+          (transaction) => (transaction.account?.user?.id ?? transaction.account?.userId) === session.userId,
+        )
+  }, [clientScopedTransactions, orderedTransactions, session])
 
   const metrics = useMemo(() => {
     const totalBalance = accounts.reduce((sum, account) => sum + (account.balance ?? 0), 0)
@@ -379,6 +417,9 @@ function App() {
       await action()
       setSuccess(message)
       await loadData()
+      if (session?.role === 'client') {
+        await loadClientData(session.userId)
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Action impossible.')
     } finally {
@@ -418,6 +459,7 @@ function App() {
       setClientView('dashboard')
       setSuccess('Connexion client réussie.')
       await loadData()
+      await loadClientData(user.id)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Connexion impossible.')
     } finally {
@@ -441,6 +483,7 @@ function App() {
       setClientView('dashboard')
       setSuccess('Compte client créé avec succès.')
       await loadData()
+      await loadClientData(createdUser.id)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Inscription impossible.')
     } finally {
@@ -564,7 +607,7 @@ function App() {
   }
 
   function handleTransactionAccountChange(accountId: string) {
-    const account = accounts.find((item) => String(item.id) === accountId)
+    const account = [...accounts, ...clientScopedAccounts].find((item) => String(item.id) === accountId)
     setTransactionForm({
       accountId,
       amount: '',

@@ -90,6 +90,7 @@ export const api = {
     }),
 
   getAccounts: () => request<Account[]>('/api/admin/accounts'),
+  getAccountsByUser: (userId: number) => request<Account[]>(`/api/accounts/user/${userId}`),
   createAccount: ({ userId, bankId, initialBalance }: AccountPayload) =>
     request<Account>(
       `/api/accounts/user/${userId}?${query({ bankId, initialBalance })}`,
@@ -97,6 +98,7 @@ export const api = {
     ),
 
   getTransactions: () => request<Transaction[]>('/api/admin/logs'),
+  getTransactionsByUser: (userId: number) => request<Transaction[]>(`/api/transactions/user/${userId}`),
   deposit: (payload: DepositPayload) =>
     request<Transaction>(
       `/api/transactions/deposit?${query({
