@@ -1,23 +1,28 @@
 package com.gestion_transactions.backend.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import com.gestion_transactions.backend.model.Account;
 import com.gestion_transactions.backend.model.Bank;
 import com.gestion_transactions.backend.model.User;
 import com.gestion_transactions.backend.repository.AccountRepository;
 import com.gestion_transactions.backend.repository.TransactionRepository;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-
-import java.time.LocalDateTime;
-import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 public class TransactionServiceTest {
@@ -59,7 +64,7 @@ public class TransactionServiceTest {
         // Simuler qu'aucun retrait n'a été fait aujourd'hui
         when(transactionRepository.getTotalWithdrawalsToday(any(), any(), any())).thenReturn(0.0);
 
-        // 2 & 3. Action et Vérification (Act & Assert) : On essaie de retirer 100$
+        // 2 & 3. Action et Vérification (Act & Assert) : On essaie de retirer 100$$
         Exception exception = assertThrows(RuntimeException.class, () -> {
             transactionService.withdraw(1L, 100.0, "Alice Dupont", "0700000000");
         });
